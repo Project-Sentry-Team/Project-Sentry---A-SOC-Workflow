@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentry - Security Reports (Live Server)</title>
+    
+    <!-- Google Fonts: Goldman Bold 700 & Inter/Roboto Mono for body -->
+    <link href="https://fonts.googleapis.com/css2?family=Goldman:wght@700&family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS (Styling) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Roboto Mono', 'monospace'],
+                        display: ['Goldman', 'cursive'],
+                    },
+                    colors: {
+                        sentry: {
+                            yellow: '#FACC15', // bright yellow
+                            dark: '#0f0f0f',   // almost black
+                            gray: '#f5f5f5'    // light gray bg
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+        
+        /* Animations */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
+        }
+    </style>
+</head>
+<body class="bg-sentry-gray text-sentry-dark font-sans selection:bg-sentry-yellow selection:text-black">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // --- ICONS ---
+        const IconWrapper = ({ children, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {children}
+            </svg>
+        );
+
+        const Icons = {
+            Shield: (p) => <IconWrapper {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></IconWrapper>,
+            FileText: (p) => <IconWrapper {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></IconWrapper>,
+            AlertTriangle: (p) => <IconWrapper {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></IconWrapper>,
+            Server: (p) => <IconWrapper {...p}><rect x="2" y="2" width="20" height="8" rx="2" ry="2" /><rect x="2" y="14" width="20" height="8" rx="2" ry="2" /><line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" /></IconWrapper>,
+            Activity: (p) => <IconWrapper {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></IconWrapper>,
+            CheckCircle: (p) => <IconWrapper {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></IconWrapper>,
+            Menu: (p) => <IconWrapper {...p}><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" /></IconWrapper>,
+            X: (p) => <IconWrapper {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></IconWrapper>,
+            ChevronRight: (p) => <IconWrapper {...p}><polyline points="9 18 15 12 9 6" /></IconWrapper>,
+            ChevronLeft: (p) => <IconWrapper {...p}><polyline points="15 18 9 12 15 6" /></IconWrapper>,
+            Terminal: (p) => <IconWrapper {...p}><polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" /></IconWrapper>,
+            Users: (p) => <IconWrapper {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></IconWrapper>,
+            Plus: (p) => <IconWrapper {...p}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></IconWrapper>,
+            Home: (p) => <IconWrapper {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></IconWrapper>,
+            Trash: (p) => <IconWrapper {...p}><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></IconWrapper>,
+            Clipboard: (p) => <IconWrapper {...p}><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" ry="1" /></IconWrapper>,
+            RefreshCw: (p) => <IconWrapper {...p}><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></IconWrapper>,
+            ArrowLeft: (p) => <IconWrapper {...p}><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></IconWrapper>,
+            ArrowRight: (p) => <IconWrapper {...p}><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></IconWrapper>
+        };
+
+        // --- HELPER COMPONENTS ---
+
+        const PriorityBadge = ({ level }) => {
+            const colors = {
+                CRITICAL: "bg-red-600 text-white border-red-700 shadow-sm shadow-red-200",
+                HIGH: "bg-orange-100 text-orange-800 border-orange-200",
+                MEDIUM: "bg-yellow-100 text-yellow-800 border-yellow-200",
+                LOW: "bg-green-100 text-green-800 border-green-200",
+            };
+            const displayLevel = (level || 'LOW').toUpperCase();
+            return (
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border tracking-wider ${colors[displayLevel] || colors.LOW}`}>
+                {displayLevel}
+                </span>
+            );
+        };
+
+        const SectionHeader = ({ icon: IconComponent, title }) => (
+            <div className="flex items-center gap-3 mb-6 border-b border-gray-100 pb-3">
+                <div className="p-2 bg-yellow-50 rounded-lg text-yellow-600">
+                    <IconComponent className="w-5 h-5" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 tracking-tight">{title}</h3>
+            </div>
+        );
+
+        const RichText = ({ text }) => {
+            if (!text) return null;
+            const content = Array.isArray(text) ? text.join('. ') : text;
+            // Basic bold markdown support
+            const parts = content.split(/(\*\*.*?\*\*)/g);
+            return (
+                <span>
+                {parts.map((part, i) => {
+                    if (part.startsWith('**') && part.endsWith('**')) {
+                        return <strong key={i} className="font-bold text-gray-900">{part.slice(2, -2)}</strong>;
+                    }
+                    return part;
+                })}
+                </span>
+            );
+        };
+        
+        const ConfirmModal = ({ title, message, onConfirm, onCancel, isDestructive }) => (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full border border-gray-100">
+                    <h3 className="text-xl font-bold mb-2 text-gray-900">{title}</h3>
+                    <p className="text-sm text-gray-600 mb-6 leading-relaxed">{message}</p>
+                    <div className="flex justify-end gap-3">
+                        <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+                        <button 
+                            onClick={onConfirm} 
+                            className={`px-4 py-2 text-sm font-bold text-white rounded-lg shadow-md transition-transform active:scale-95 ${isDestructive ? 'bg-red-600 hover:bg-red-700' : 'bg-yellow-500 hover:bg-yellow-600 text-black'}`}
+                        >
+                            {isDestructive ? 'Delete' : 'Confirm'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+
+        // --- VIEWS ---
+
+        const TechnicalView = ({ data }) => {
+            if (!data) return <div className="p-12 text-center text-gray-400">No technical data available.</div>;
+            const analysisContent = data.analysis || data.what_happened || "No detailed analysis provided.";
+            const immediateActions = data.recommendations?.immediate_actions || data.immediate_actions || [];
+            const longTermFixes = data.recommendations?.long_term_fixes || data.long_term_fixes || [];
+            const affectedAssets = data.affected_assets || (data.victim_ip ? [{ ip: data.victim_ip, description: "Affected Internal System" }] : []);
+            const attackerIndicators = data.attacker_indicators || (data.attacker_ip ? [{ ip: data.attacker_ip, geo: "Unknown", asn: "Unknown" }] : []);
+            
+            return (
+                <div className="space-y-6 animate-fade-in pb-12">
+                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                        <div className="flex justify-between items-start mb-6">
+                            <h2 className="text-3xl font-bold text-gray-900 tracking-tight">{data.title}</h2>
+                            <PriorityBadge level={data.priority} />
+                        </div>
+                        <div className="text-gray-600 leading-relaxed text-lg border-l-4 border-yellow-400 pl-4"><RichText text={data.summary} /></div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 space-y-6">
+                            <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                                <SectionHeader icon={Icons.Terminal} title="Technical Analysis" />
+                                <div className="prose prose-sm max-w-none text-gray-700 leading-7 font-mono text-sm bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                    <RichText text={analysisContent} />
+                                </div>
+                            </div>
+                            <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                                <SectionHeader icon={Icons.CheckCircle} title="Remediation Plan" />
+                                <div className="grid md:grid-cols-2 gap-8">
+                                    <div>
+                                        <h4 className="text-xs font-bold text-red-600 uppercase tracking-widest mb-4 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-600"></div> Immediate Actions</h4>
+                                        <ul className="space-y-3">
+                                            {immediateActions.length > 0 ? immediateActions.map((act, i) => <li key={i} className="text-gray-700 text-sm flex gap-2 items-start"><span className="text-red-400 mt-1">›</span> <span><RichText text={act} /></span></li>) : <li className="text-gray-400 text-sm italic">No immediate actions specified.</li>}
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-bold text-yellow-600 uppercase tracking-widest mb-4 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-yellow-500"></div> Long Term Fixes</h4>
+                                        <ul className="space-y-3">
+                                            {longTermFixes.length > 0 ? longTermFixes.map((fix, i) => <li key={i} className="text-gray-700 text-sm flex gap-2 items-start"><span className="text-yellow-400 mt-1">›</span> <span><RichText text={fix} /></span></li>) : <li className="text-gray-400 text-sm italic">No long-term fixes specified.</li>}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="space-y-6">
+                            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                                <SectionHeader icon={Icons.Server} title="Affected Assets" />
+                                <div className="space-y-3">
+                                {affectedAssets.map((asset, i) => (
+                                    <div key={i} className="bg-gray-50 p-3 rounded border border-gray-100 text-sm hover:border-yellow-300 transition-colors">
+                                        <div className="font-mono text-gray-900 font-bold mb-1">{asset.ip}</div>
+                                        <div className="text-gray-500 text-xs"><RichText text={asset.description} /></div>
+                                    </div>
+                                ))}
+                                {affectedAssets.length === 0 && <div className="text-gray-400 text-sm italic">No internal assets specified.</div>}
+                                </div>
+                            </div>
+                            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                                <SectionHeader icon={Icons.Activity} title="IOCs / Indicators" />
+                                <div className="space-y-2">
+                                {attackerIndicators.map((ind, i) => (
+                                    <div key={i} className="flex flex-col text-sm border-b border-gray-100 last:border-0 pb-2 last:pb-0 gap-1">
+                                        <span className="text-xs text-gray-400 font-medium">Remote Host</span>
+                                        <span className="font-mono text-black font-semibold">{ind.ip}</span>
+                                        <span className="text-xs text-gray-500 flex justify-between">
+                                            <span>{ind.geo}</span>
+                                            <span>{ind.asn}</span>
+                                        </span>
+                                    </div>
+                                ))}
+                                {attackerIndicators.length === 0 && <div className="text-gray-400 text-sm italic">No external indicators listed.</div>}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const LeadershipView = ({ data }) => {
+            if (!data) return <div className="p-12 text-center text-gray-400">No leadership data available.</div>;
+            const mitigationContent = Array.isArray(data.what_we_are_doing) ? data.what_we_are_doing.join('. ') : data.what_we_are_doing;
+            const isCritical = data.risk_level === 'CRITICAL';
+            
+            return (
+                <div className="space-y-6 max-w-5xl mx-auto animate-fade-in pb-12">
+                    <div className={`p-10 rounded-2xl border relative overflow-hidden ${isCritical ? 'bg-red-900 text-white border-red-800' : 'bg-white text-gray-900 border-gray-200 shadow-sm'}`}>
+                        {isCritical && <div className="absolute top-0 right-0 p-32 bg-red-800 rounded-full blur-3xl opacity-20 -mr-16 -mt-16 pointer-events-none"></div>}
+                        <div className="relative z-10">
+                            <div className="flex flex-col md:flex-row justify-between md:items-start gap-4 mb-8">
+                                <h2 className="text-4xl font-display font-bold tracking-wide">{data.title}</h2>
+                                <div className={`inline-flex items-center px-4 py-2 rounded-lg font-bold text-xs tracking-widest border uppercase ${isCritical ? 'bg-white/10 border-white/20 text-white' : 'bg-yellow-50 border-yellow-200 text-yellow-800'}`}>
+                                    Risk Level: {data.risk_level}
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <h3 className={`text-sm font-bold uppercase tracking-wider opacity-70 ${isCritical ? 'text-red-200' : 'text-gray-500'}`}>Executive Summary</h3>
+                                <p className={`text-xl leading-relaxed font-light ${isCritical ? 'text-white' : 'text-gray-800'}`}><RichText text={data.what_happened} /></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group">
+                            <div className="w-12 h-12 bg-yellow-50 rounded-xl flex items-center justify-center mb-6 text-yellow-600 group-hover:scale-110 transition-transform"><Icons.AlertTriangle className="w-6 h-6" /></div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-4">Business Impact</h3>
+                            <p className="text-gray-600 leading-relaxed text-sm"><RichText text={data.business_impact} /></p>
+                        </div>
+                        <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group">
+                            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-6 text-blue-600 group-hover:scale-110 transition-transform"><Icons.Shield className="w-6 h-6" /></div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-4">Strategic Response</h3>
+                            <p className="text-gray-600 leading-relaxed text-sm"><RichText text={mitigationContent} /></p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        const Overview = ({ reports, onSelectReport, onDeleteReport }) => {
+            if (reports.length === 0) {
+                return (
+                    <div className="h-[60vh] flex flex-col items-center justify-center text-gray-400">
+                        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                            <Icons.FileText className="w-8 h-8 opacity-30" />
+                        </div>
+                        <p className="font-medium">No reports found.</p>
+                        <p className="text-sm opacity-60 mt-2">Waiting for data stream...</p>
+                    </div>
+                );
+            }
+            return (
+                <div className="animate-fade-in pb-12">
+                    <div className="flex justify-between items-end mb-8">
+                        <div>
+                            <h2 className="text-3xl font-display text-gray-900">Reports</h2>
+                            <p className="text-gray-500 text-sm mt-1">Latest security intercepts and analysis</p>
+                        </div>
+                        <div className="hidden sm:block text-xs font-mono text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+                            TOTAL: {reports.length}
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                        {reports.map((report) => {
+                            const technical = report.technical_report;
+                            const leadership = report.leadership_report;
+                            const priorityLevel = technical?.priority || leadership?.risk_level || 'LOW';
+                            const title = technical?.title || leadership?.title || 'Untitled Report';
+                            const summary = technical?.summary || technical?.what_happened || leadership?.what_happened || 'No summary available.';
+                            
+                            return (
+                                <div key={report.id} 
+                                    className="group relative bg-white rounded-xl border border-gray-200 hover:border-yellow-400 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 overflow-hidden cursor-pointer flex flex-col"
+                                    onClick={() => onSelectReport(report.id)}
+                                >
+                                    <div className="p-6 flex-1">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="flex items-center gap-2">
+                                                <div className="p-2 bg-gray-50 rounded-md text-gray-400 group-hover:text-yellow-600 group-hover:bg-yellow-50 transition-colors">
+                                                    <Icons.FileText className="w-4 h-4" />
+                                                </div>
+                                                <span className="text-[10px] font-mono text-gray-400">ID: {String(report.id).slice(-4)}</span>
+                                            </div>
+                                            <PriorityBadge level={priorityLevel} />
+                                        </div>
+                                        <h3 className="text-lg font-bold text-gray-900 mb-3 leading-snug group-hover:text-yellow-600 transition-colors">{title}</h3>
+                                        <p className="text-sm text-gray-600 line-clamp-3 leading-relaxed mb-4">{summary}</p>
+                                    </div>
+                                    <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center mt-auto">
+                                        <span className="text-xs font-bold text-yellow-600 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0 duration-300">
+                                            View Report <Icons.ChevronRight className="w-3 h-3" />
+                                        </span>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); onDeleteReport(report.id); }}
+                                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors z-10"
+                                            title="Delete Report"
+                                        >
+                                            <Icons.Trash className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+        
+        const ImportModal = ({ onClose, onImportSuccess }) => {
+            const [importText, setImportText] = useState('');
+            const [file, setFile] = useState(null);
+            const [message, setMessage] = useState(null);
+            const [uploading, setUploading] = useState(false);
+
+            const handleFileChange = (e) => {
+                setFile(e.target.files[0]);
+                setImportText('');
+            };
+            
+            const handleTextChange = (e) => {
+                setImportText(e.target.value);
+                setFile(null);
+            };
+
+            const parseAndValidate = (jsonString) => {
+                let parsed;
+                try { parsed = JSON.parse(jsonString); } catch (e) { throw new Error("Invalid JSON format."); }
+                const objectsToImport = Array.isArray(parsed) ? parsed : [parsed];
+                const validReports = [];
+                for (const obj of objectsToImport) {
+                    if (obj && obj.technical_report && obj.leadership_report) { validReports.push(obj); } 
+                    else { throw new Error(`Schema validation failed. Objects must contain 'technical_report' and 'leadership_report'.`); }
+                }
+                if (validReports.length === 0) throw new Error("No valid report objects found.");
+                return validReports;
+            };
+
+            const uploadReports = async (reports) => {
+                setUploading(true);
+                try {
+                    for (const report of reports) {
+                        const response = await fetch('/api/reports', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(report)
+                        });
+                        if (!response.ok) throw new Error('Server rejected the report.');
+                    }
+                    onImportSuccess(); 
+                    onClose();
+                } catch (e) {
+                    setMessage({ title: "Upload Error", message: "Failed to send report to server. Is the Python script running?" });
+                } finally {
+                    setUploading(false);
+                }
+            };
+
+            const handleImport = async () => {
+                let jsonContent = importText;
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const validReports = parseAndValidate(e.target.result);
+                            uploadReports(validReports);
+                        } catch (e) { setMessage({ title: "Import Error", message: e.message }); }
+                    };
+                    reader.readAsText(file);
+                    return;
+                }
+                if (jsonContent) {
+                    try {
+                        const validReports = parseAndValidate(jsonContent);
+                        uploadReports(validReports);
+                    } catch (e) { setMessage({ title: "Import Error", message: e.message }); }
+                    return;
+                }
+                setMessage({ title: "Input Required", message: "Please enter JSON or select a file." });
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+                    {message && <ConfirmModal title={message.title} message={message.message} onConfirm={() => setMessage(null)} onCancel={() => setMessage(null)} isDestructive={false} />}
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] animate-fade-in border border-gray-200">
+                        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <h3 className="font-bold text-gray-900 flex items-center gap-2"><Icons.Clipboard className="w-5 h-5 text-yellow-500"/> Import to Server</h3>
+                            <button onClick={onClose} className="text-gray-400 hover:text-black"><Icons.X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="p-6 flex-1 overflow-hidden flex flex-col gap-4">
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Upload File (reports.json)</label>
+                                <input type="file" accept=".json,.txt" onChange={handleFileChange} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-yellow-500 file:text-black hover:file:bg-yellow-400 cursor-pointer"/>
+                            </div>
+                            <div className="relative flex items-center py-2">
+                                <div className="flex-grow border-t border-gray-200"></div>
+                                <span className="flex-shrink-0 mx-4 text-gray-400 text-xs font-mono">OR PASTE JSON</span>
+                                <div className="flex-grow border-t border-gray-200"></div>
+                            </div>
+                            <textarea className="flex-1 w-full border border-gray-300 rounded-lg p-3 font-mono text-xs focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 outline-none resize-none bg-gray-50 min-h-[150px]" placeholder='[{"technical_report": {...}, "leadership_report": {...}}]' value={importText} onChange={handleTextChange} disabled={!!file}></textarea>
+                        </div>
+                        <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
+                            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">Cancel</button>
+                            <button onClick={handleImport} disabled={uploading} className="px-4 py-2 text-sm font-bold bg-yellow-500 hover:bg-yellow-600 text-black rounded-lg shadow-md transition-colors flex items-center gap-2">
+                                {uploading && <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-black"></span>}
+                                {uploading ? 'Uploading...' : 'Import Data'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [reports, setReports] = useState([]);
+            const [activeReportId, setActiveReportId] = useState(null); 
+            const [reportViewMode, setReportViewMode] = useState('technical'); 
+            const [currentView, setCurrentView] = useState('overview');
+            const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1280); 
+            const [isImporting, setIsImporting] = useState(false);
+            const [isLoading, setIsLoading] = useState(false);
+            const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id: 123 }
+            const mainContentRef = useRef(null);
+            
+            // --- SERVER FETCH LOGIC ---
+            const fetchReports = useCallback(async () => {
+                try {
+                    const response = await fetch('/api/reports');
+                    if (response.ok) {
+                        const data = await response.json();
+                        setReports(prev => {
+                            if (JSON.stringify(prev) !== JSON.stringify(data)) return data;
+                            return prev;
+                        });
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch reports:", e);
+                }
+            }, []);
+
+            useEffect(() => {
+                setIsLoading(true);
+                fetchReports().then(() => setIsLoading(false));
+                const intervalId = setInterval(fetchReports, 5000);
+                return () => clearInterval(intervalId);
+            }, [fetchReports]);
+
+            const SIDEBAR_WIDTH = sidebarOpen ? 'w-80' : 'w-20';
+            const activeReport = reports.find(r => r.id === activeReportId);
+            
+            // Navigation Logic
+            const currentIndex = reports.findIndex(r => r.id === activeReportId);
+            const hasNext = currentIndex !== -1 && currentIndex < reports.length - 1;
+            const hasPrev = currentIndex !== -1 && currentIndex > 0;
+
+            useEffect(() => {
+                if (mainContentRef.current) mainContentRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+            }, [reportViewMode, activeReportId, currentView]);
+
+            const handleSelectReport = (reportId) => {
+                setActiveReportId(reportId);
+                setCurrentView('report');
+                if (window.innerWidth < 1024) setSidebarOpen(false);
+            };
+            
+            const handleBackToOverview = () => {
+                setCurrentView('overview');
+                setActiveReportId(null);
+            };
+
+            const handleNextReport = () => {
+                if(hasNext) setActiveReportId(reports[currentIndex + 1].id);
+            };
+
+            const handlePrevReport = () => {
+                if(hasPrev) setActiveReportId(reports[currentIndex - 1].id);
+            };
+
+            const confirmDeleteReport = (id) => {
+                setDeleteConfirmation({ id });
+            };
+
+            const executeDelete = async () => {
+                if (!deleteConfirmation) return;
+                const id = deleteConfirmation.id;
+                
+                // Optimistic UI update
+                const previousReports = [...reports];
+                setReports(prev => prev.filter(r => r.id !== id));
+                setDeleteConfirmation(null);
+                
+                if (activeReportId === id) handleBackToOverview();
+
+                try {
+                    await fetch(`/api/reports/${id}`, { method: 'DELETE' });
+                } catch (err) {
+                    console.error("Delete failed", err);
+                    setReports(previousReports); // Revert on failure
+                    alert("Failed to delete report from server.");
+                }
+            };
+            
+            const handleImportSuccess = () => {
+                fetchReports();
+            };
+
+            return (
+                <div className="flex h-screen bg-gray-50 font-sans text-gray-900 overflow-hidden">
+                    {/* CONFIRM DELETE MODAL */}
+                    {deleteConfirmation && (
+                        <ConfirmModal 
+                            title="Delete Report?" 
+                            message="This action cannot be undone. This report will be permanently removed from the server." 
+                            onConfirm={executeDelete} 
+                            onCancel={() => setDeleteConfirmation(null)} 
+                            isDestructive={true}
+                        />
+                    )}
+
+                    {/* SIDEBAR */}
+                    <div className={`fixed inset-y-0 left-0 z-40 ${SIDEBAR_WIDTH} bg-sentry-dark text-white transform transition-all duration-300 ease-in-out flex-shrink-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 flex flex-col border-r border-gray-800`}>
+                        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden md:flex absolute -right-3 top-8 p-1 rounded-full bg-sentry-yellow text-black shadow-lg hover:bg-yellow-300 transition-colors z-50 border border-black" title="Toggle Sidebar">
+                            {sidebarOpen ? <Icons.ChevronLeft className="w-3 h-3" /> : <Icons.ChevronRight className="w-3 h-3" />}
+                        </button>
+                        
+                        <div className={`p-6 flex flex-col justify-center h-20 border-b border-gray-800 ${sidebarOpen ? 'items-start' : 'items-center'}`}>
+                             {sidebarOpen ? (
+                                 <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-sentry-yellow rounded flex items-center justify-center text-black shadow-lg shadow-yellow-500/20"><Icons.Shield className="w-5 h-5" /></div>
+                                    <h1 
+                                        onClick={handleBackToOverview}
+                                        className="font-display text-2xl tracking-wider text-white cursor-pointer hover:text-sentry-yellow transition-colors"
+                                    >
+                                        SENTRY
+                                    </h1>
+                                 </div>
+                             ) : (
+                                <div className="w-10 h-10 bg-sentry-yellow rounded flex items-center justify-center text-black hover:scale-105 transition-transform cursor-pointer" onClick={() => setSidebarOpen(true)}><Icons.Shield className="w-6 h-6" /></div>
+                             )}
+                        </div>
+
+                        <div className="p-4 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700">
+                            <div className={`text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4 px-2 ${!sidebarOpen && 'hidden'}`}>Reports</div>
+                            <div className="space-y-1">
+                                {reports.map((report) => (
+                                <button key={report.id} onClick={() => handleSelectReport(report.id)} title={!sidebarOpen ? report.technical_report?.title : undefined} className={`w-full flex items-center ${sidebarOpen ? 'gap-3 px-3 py-3' : 'justify-center p-3'} rounded-lg text-sm transition-all group ${activeReportId === report.id && currentView === 'report' ? 'bg-white/10 text-white font-medium border-l-2 border-sentry-yellow' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                                    <Icons.FileText className={`w-4 h-4 flex-shrink-0 ${activeReportId === report.id && currentView === 'report' ? 'text-sentry-yellow' : 'text-gray-500 group-hover:text-gray-300'}`} />
+                                    {sidebarOpen && <span className="truncate">{report.technical_report?.title || 'Untitled Report'}</span>}
+                                </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-gray-800 bg-black/20">
+                            <button onClick={() => setIsImporting(true)} className={`w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-lg text-sm font-medium transition-all border border-gray-700 hover:border-gray-500 ${!sidebarOpen && 'px-0'}`}>
+                                <Icons.Plus className="w-4 h-4 text-sentry-yellow" />
+                                {sidebarOpen && <span>Import Data</span>}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* MAIN CONTENT AREA */}
+                    <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+                        {/* HEADER */}
+                        <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-8 z-30 shadow-sm flex-shrink-0">
+                            <div className="flex items-center gap-4">
+                                <button onClick={() => setSidebarOpen(!sidebarOpen)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-md">
+                                    {sidebarOpen ? <Icons.X className="w-5 h-5" /> : <Icons.Menu className="w-5 h-5" />}
+                                </button>
+                                
+                                <div className="flex items-center">
+                                     {/* Mobile Title */}
+                                    {!sidebarOpen && <h1 onClick={handleBackToOverview} className="md:hidden font-display text-2xl tracking-wide mr-4 cursor-pointer">SENTRY</h1>}
+                                    
+                                    {/* Breadcrumbs */}
+                                    <nav className="flex items-center text-sm">
+                                        <button 
+                                            onClick={handleBackToOverview} 
+                                            className={`flex items-center gap-2 transition-colors ${currentView === 'overview' ? 'text-gray-900 font-bold' : 'text-gray-500 hover:text-gray-900'}`}
+                                        >
+                                            <Icons.Home className="w-4 h-4 text-sentry-yellow" />
+                                            Overview
+                                        </button>
+                                        
+                                        {currentView === 'report' && activeReport && (
+                                            <>
+                                                <Icons.ChevronRight className="w-4 h-4 text-gray-300 mx-2" />
+                                                <span className="font-semibold text-gray-900 truncate max-w-[150px] sm:max-w-xs">{activeReport.technical_report?.title || 'Report Details'}</span>
+                                            </>
+                                        )}
+                                    </nav>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-3">
+                                {currentView === 'report' && (
+                                    <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+                                        <button onClick={() => setReportViewMode('technical')} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide transition-all ${reportViewMode === 'technical' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'}`}>Technical</button>
+                                        <button onClick={() => setReportViewMode('leadership')} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide transition-all ${reportViewMode === 'leadership' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'}`}>Leadership</button>
+                                    </div>
+                                )}
+                                <div className="h-6 w-px bg-gray-300 mx-1"></div>
+                                <button onClick={() => fetchReports()} className="p-2 text-gray-400 hover:text-black transition-colors rounded-full hover:bg-gray-100" title="Force Refresh"><Icons.RefreshCw className="w-4 h-4" /></button>
+                            </div>
+                        </header>
+
+                        {/* REPORT NAVIGATION BAR (Only visible in Report View) */}
+                        {currentView === 'report' && (
+                            <div className="sticky top-0 z-20 glass-panel border-b border-gray-200 px-8 py-3 flex justify-between items-center shadow-sm">
+                                <button 
+                                    onClick={handleBackToOverview}
+                                    className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-black transition-colors group"
+                                >
+                                    <div className="p-1 rounded bg-gray-100 group-hover:bg-sentry-yellow group-hover:text-black transition-colors"><Icons.ArrowLeft className="w-4 h-4" /></div>
+                                    Back to Overview
+                                </button>
+                                
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={handlePrevReport} 
+                                        disabled={!hasPrev}
+                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${hasPrev ? 'hover:bg-gray-100 text-gray-700 hover:text-black' : 'opacity-30 cursor-not-allowed text-gray-400'}`}
+                                    >
+                                        <Icons.ChevronLeft className="w-4 h-4" /> Prev Report
+                                    </button>
+                                    <div className="text-xs font-mono text-gray-400">
+                                        {currentIndex + 1} / {reports.length}
+                                    </div>
+                                    <button 
+                                        onClick={handleNextReport} 
+                                        disabled={!hasNext}
+                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${hasNext ? 'hover:bg-gray-100 text-gray-700 hover:text-black' : 'opacity-30 cursor-not-allowed text-gray-400'}`}
+                                    >
+                                        Next Report <Icons.ChevronRight className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        <main ref={mainContentRef} className="flex-1 overflow-y-auto bg-gray-50 p-6 md:p-8 relative">
+                            {currentView === 'overview' && <Overview reports={reports} onSelectReport={handleSelectReport} onDeleteReport={confirmDeleteReport} />}
+                            {currentView === 'report' && activeReport && (
+                                <>
+                                {reportViewMode === 'technical' && <TechnicalView data={activeReport.technical_report} />}
+                                {reportViewMode === 'leadership' && <LeadershipView data={activeReport.leadership_report} />}
+                                </>
+                            )}
+                            {currentView === 'report' && !activeReport && <div className="h-full flex flex-col items-center justify-center text-gray-400"><Icons.FileText className="w-12 h-12 mb-4 opacity-20" /><p>Select a report from the sidebar.</p></div>}
+                        </main>
+                    </div>
+                    {isImporting && <ImportModal onClose={() => setIsImporting(false)} onImportSuccess={handleImportSuccess} />}
+                </div>
+            );
+        };
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
