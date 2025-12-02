@@ -92,18 +92,6 @@ The demo showcases:
 
 ---
 
-## Getting Started
+## More Details
 
-*Coming soon: Installation and setup instructions*
-
----
-
-## License
-
-*Add license information here*
-
----
-
-## Contributing
-
-*Add contribution guidelines here*
+For more details, read 'TechnicalPaper.docx' or the 'makingof' documents.
