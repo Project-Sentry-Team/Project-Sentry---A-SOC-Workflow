@@ -1,3 +1,6 @@
+*This project was done as part of the Eduvos GD & IS Showcase.*
+*By Salman Sadiq & Vaidant Makan.*
+
 # Sentry
 
 **Security Operations Center Digital Watchtower**
